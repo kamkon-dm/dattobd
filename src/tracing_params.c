@@ -5,6 +5,7 @@
  */
 
 #include "tracing_params.h"
+#include "tracer.h"
 #include "bio_helper.h"
 #include "bio_queue.h"
 #include "includes.h"
@@ -71,6 +72,10 @@ void tp_put(struct tracing_params *tp)
                 // if there are no references left, its safe to release the
                 // orig_bio
                 bio_queue_add(&tp->dev->sd_orig_bios, tp->orig_bio);
+
+                // all data from the write bio has been written to COW at this point
+                // hence, update the range of used sectors
+                srng_man_add_range(tp->dev, tp->orig_bio);
 
                 // free nodes in the sector map list
                 for (curr = tp->bio_sects.head; curr != NULL; curr = next) {

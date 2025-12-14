@@ -18,6 +18,7 @@
 #include "mrf.h"
 #include "snap_device.h"
 #include "snap_ops.h"
+#include "sset_list.h"
 #include "submit_bio.h"
 #include "task_helper.h"
 #include "tracer_helper.h"
@@ -418,12 +419,13 @@ static void minor_range_include(unsigned int minor)
  */
 static void __tracer_init(struct snap_device *dev)
 {
-        LOG_DEBUG("initializing tracer");
-        atomic_set(&dev->sd_fail_code, 0);
-        atomic_set(&dev->sd_active, 0);
-        bio_queue_init(&dev->sd_cow_bios);
-        bio_queue_init(&dev->sd_orig_bios);
-        sset_queue_init(&dev->sd_pending_ssets);
+    LOG_DEBUG("initializing tracer");
+    atomic_set(&dev->sd_fail_code, 0);
+    atomic_set(&dev->sd_active, 0);
+    bio_queue_init(&dev->sd_cow_bios);
+    bio_queue_init(&dev->sd_orig_bios);
+    sset_queue_init(&dev->sd_pending_ssets);
+    srng_man_init(&dev->sd_srng_man);
 }
 
 /**
@@ -448,6 +450,12 @@ int tracer_alloc(struct snap_device **dev_ptr)
                 ret = -ENOMEM;
                 LOG_ERROR(ret, "error allocating memory for device struct");
                 goto error;
+        }
+
+        ret = srng_man_alloc(&dev->sd_srng_man);
+        if (ret)
+        {
+            goto error;
         }
 
         __tracer_init(dev);
@@ -597,7 +605,7 @@ static int __tracer_setup_cow(struct snap_device *dev,
                 } else {
                         // reload the cow manager
                         LOG_DEBUG("reloading cow manager");
-                        ret = cow_reload(cow_path, SECTOR_TO_BLOCK(size),
+                        ret = cow_reload(dev, cow_path, SECTOR_TO_BLOCK(size),
                                          COW_SECTION_SIZE, dev->sd_cache_size,
                                          (open_method == 2), &dev->sd_cow);
                         if (ret)
@@ -1388,6 +1396,7 @@ static int __tracer_transition_tracing(
  * Return: varies across versions of Linux and is what's expected by each for
  *         a make request function.
  */
+
 #ifdef USE_BDOPS_SUBMIT_BIO
 static asmlinkage MRF_RETURN_TYPE tracing_fn(struct bio *bio)
 #else
@@ -1403,25 +1412,19 @@ static MRF_RETURN_TYPE tracing_fn(struct request_queue *q, struct bio *bio)
         smp_rmb();
         tracer_for_each(dev, i)
         {
-                if (!tracer_is_bio_for_dev(dev, bio)) continue;
-                // If we get here, then we know this is a device we're managing
-                // and the current bio belongs to said device.
-                orig_fn=dev->sd_orig_request_fn;
-                if (dattobd_bio_op_flagged(bio, DATTOBD_PASSTHROUGH))
-                {
-                        dattobd_bio_op_clear_flag(bio, DATTOBD_PASSTHROUGH);
-                }
+            if (!tracer_is_bio_for_dev(dev, bio)) continue;
+            // If we get here, then we know this is a device we're managing
+            // and the current bio belongs to said device.
+            orig_fn = dev->sd_orig_request_fn;
+
+            if (tracer_should_trace_bio(dev, bio) && srng_man_check_range(dev, bio))
+            {
+                if (test_bit(SNAPSHOT, &dev->sd_state))
+                    ret = snap_trace_bio(dev, bio);
                 else
-                {
-                        if (tracer_should_trace_bio(dev, bio))
-                        {
-                                if (test_bit(SNAPSHOT, &dev->sd_state))
-                                        ret = snap_trace_bio(dev, bio);
-                                else
-                                        ret = inc_trace_bio(dev, bio);
-                                goto out;
-                        }
-                } 
+                    ret = inc_trace_bio(dev, bio);
+                goto out;
+            }
         } // tracer_for_each(dev, i)
 
 #ifdef USE_BDOPS_SUBMIT_BIO
@@ -2010,6 +2013,7 @@ int tracer_active_snap_to_inc(struct snap_device *old_dev, snap_device_array_mut
 
                 // clean up the old device no matter what
                 __tracer_destroy_snap(old_dev);
+                srng_man_destroy(&old_dev->sd_srng_man);
                 kfree(old_dev);
 
                 return ret;
@@ -2040,6 +2044,7 @@ int tracer_active_snap_to_inc(struct snap_device *old_dev, snap_device_array_mut
 
         // destroy the unneeded fields of the old_dev and the old_dev itself
         __tracer_destroy_snap(old_dev);
+        srng_man_destroy(&old_dev->sd_srng_man);
         kfree(old_dev);
 
         return 0;
@@ -2047,6 +2052,7 @@ int tracer_active_snap_to_inc(struct snap_device *old_dev, snap_device_array_mut
 error:
         LOG_ERROR(ret, "error transitioning to incremental mode");
         __tracer_destroy_cow_thread(dev);
+        srng_man_destroy(&dev->sd_srng_man);
         kfree(dev);
 
         return ret;
@@ -2125,6 +2131,7 @@ int tracer_active_inc_to_snap(struct snap_device *old_dev, const char *cow_path,
         // destroy the unneeded fields of the old_dev and the old_dev itself
         __tracer_destroy_cow_path(old_dev);
         __tracer_destroy_cow_sync_and_free(old_dev);
+        srng_man_destroy(&old_dev->sd_srng_man);
         kfree(old_dev);
 
         return 0;
@@ -2135,6 +2142,7 @@ error:
         __tracer_destroy_snap(dev);
         __tracer_destroy_cow_path(dev);
         __tracer_destroy_cow_free(dev);
+        srng_man_destroy(&dev->sd_srng_man);
         kfree(dev);
 
         return ret;
@@ -2491,4 +2499,134 @@ int tracer_expand_cow_file_no_check(struct snap_device *dev, uint64_t by_size_by
         }
 
         return ret;
+}
+
+/************************ADDITIONAL FUNCTIONS************************/
+
+/**
+ * srng_man_init() - Initialize a sector range manager data
+ * @srng_man: The structure used by sector range manager
+ */
+void srng_man_init(struct sec_rng_man* srng_man)
+{
+    spin_lock_init(&srng_man->srng_lock);
+}
+
+/**
+ * srng_man_alloc() - Allocate structure used by sector range manager
+ * @srng_man: The structure used by sector range manager
+ *
+ * Return:
+ * 0 when success
+ * !0 otherwise
+ */
+int srng_man_alloc(struct sec_rng_man *srng_man)
+{
+    int ret=0;
+
+    srng_man->srng_a = kmalloc(sizeof(struct srng_array), GFP_KERNEL);
+    if (!srng_man->srng_a)
+    {
+        ret = -ENOMEM;
+        LOG_ERROR(ret, "Sector range manager allocation error");
+    }
+    srng_init(srng_man->srng_a);
+
+    return ret;
+}
+
+/**
+ * srng_man_destroy() - Destroy a sector range manager data
+ * @srng_man: The structure used by sector range manager
+ */
+void srng_man_destroy(struct sec_rng_man* srng_man)
+{
+    if (srng_man->srng_a)
+    {
+        kfree(srng_man->srng_a);
+    }
+}
+
+/**
+ * srng_man_check_range() - Check if bio sector range has been repeated recently (RCU protected)
+ * @dev: Struct snap_device* corresponds to device from the bio
+ * @bio: Struct bio which describes the I/O
+ *
+ * Return:
+ * 0 when bio range is repeated (return value mapped from srng_check)
+ * 1 otherwise
+ */
+
+int srng_man_check_range(struct snap_device* dev, struct bio* bio)
+{
+    int ret = 1;
+    struct srng_array* srng_a;
+    struct srng_range srng;
+
+    if (!dev->sd_srng_man.srng_a)
+    {
+        ret = -EFAULT;
+        LOG_ERROR(ret, "Unallocated sector range array");
+        return ret;
+    }
+
+    srng.sect = bio_sector(bio);
+    srng.size = bio_size(bio) >> SECTOR_SHIFT;
+
+    rcu_read_lock();
+    srng_a = rcu_dereference(dev->sd_srng_man.srng_a);
+
+    ret = srng_check(srng_a, &srng);
+
+    rcu_read_unlock();
+    return ret;
+}
+
+/**
+ * srng_man_add_range() - Add bio sector range to the snapshot device dedicated array (RCU protected)
+ * @dev: Struct snap_device* corresponds to device from the bio
+ * @bio: Struct bio which describes the I/O
+ *
+ * Return:
+ * 0 sectors range added properly
+ * !0 otherwise
+ */
+
+int srng_man_add_range(struct snap_device* dev, struct bio* bio)
+{
+    int ret = 0;
+    struct srng_array* srng_a;
+    struct srng_array* srng_a_new;
+    struct srng_range srng;
+    unsigned long flags;
+
+    if (!dev->sd_srng_man.srng_a)
+    {
+        ret = -EFAULT;
+        LOG_ERROR(ret, "Unallocated sector range array");
+        return ret;
+    }
+
+    srng.sect = bio_sector(bio);
+    srng.size = bio_size(bio) >> SECTOR_SHIFT;
+
+    srng_a_new = kmalloc(sizeof(struct srng_array), GFP_KERNEL);
+    if (!srng_a_new)
+    {
+        ret = -ENOMEM;
+        LOG_ERROR(ret, "Cannot allocate memory for sector range array");
+        return ret;
+    }
+
+    spin_lock_irqsave(&dev->sd_srng_man.srng_lock, flags);
+    srng_a = rcu_dereference_protected(dev->sd_srng_man.srng_a, lockdep_is_held(&dev->sd_srng_man.srng_lock));
+    *srng_a_new = *srng_a;
+
+    srng_add(srng_a_new, &srng);
+
+    rcu_assign_pointer(dev->sd_srng_man.srng_a, srng_a_new);
+    spin_unlock_irqrestore(&dev->sd_srng_man.srng_lock, flags);
+    kfree_rcu(srng_a, rcu);
+
+    return ret;
 }

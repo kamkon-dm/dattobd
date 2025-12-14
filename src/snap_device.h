@@ -43,6 +43,12 @@ static inline void tracing_ops_put(struct tracing_ops *trops) {
 }
 #endif
 
+// Array used to represent sectors range of recently managed bios - RCU protected with spinlock for updater
+struct sec_rng_man {
+    spinlock_t srng_lock; // protection for sectors range updater
+    struct srng_array *srng_a; // array of sector ranges already written in COW file
+};
+
 struct snap_device {
         unsigned int sd_minor; // minor number of the snapshot
         unsigned long sd_state; // current state of the snapshot
@@ -68,6 +74,7 @@ struct snap_device {
                                            // read/writes
         struct bio_queue sd_orig_bios; // list of outstanding original bios
         struct sset_queue sd_pending_ssets; // list of outstanding sector sets
+        struct sec_rng_man sd_srng_man; // sectors range array management data
 	struct fiemap_extent *sd_cow_extents; //cow file extents
 	unsigned int sd_cow_ext_cnt; //cow file extents count
 #ifndef HAVE_BIOSET_INIT

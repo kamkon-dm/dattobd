@@ -68,4 +68,11 @@ void __tracer_unverified_inc_to_active(struct snap_device *dev,
 void __tracer_dormant_to_active(struct snap_device *dev,
                                 const char __user *user_mount_path);
 
+/************************ADDITIONAL FUNCTIONS************************/
+void srng_man_init(struct sec_rng_man* srng_man);
+int srng_man_alloc(struct sec_rng_man* srng_man);
+void srng_man_destroy(struct sec_rng_man* srng_man);
+int srng_man_check_range(struct snap_device* dev, struct bio* bio);
+int srng_man_add_range(struct snap_device* dev, struct bio* bio);
+
 #endif /* TRACER_H_ */

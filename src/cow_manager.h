@@ -87,8 +87,8 @@ int cow_sync_and_close(struct cow_manager *cm);
 
 int cow_reopen(struct cow_manager *cm, const char *pathname);
 
-int cow_reload(const char *path, uint64_t elements, unsigned long sect_size,
-               unsigned long cache_size, int index_only,
+int cow_reload(struct snap_device* dev, const char *path, uint64_t elements,
+               unsigned long sect_size, unsigned long cache_size, int index_only,
                struct cow_manager **cm_out);
 
 int cow_init(struct snap_device *dev, const char *path, uint64_t elements, unsigned long sect_size,

@@ -121,23 +121,17 @@ static int __cow_alloc_section(struct cow_manager *cm, unsigned long sect_idx,
  */
 static int __cow_load_section(struct cow_manager *cm, unsigned long sect_idx)
 {
-        int ret, i;
-        int sect_size_bytes = COW_SECTION_SIZE * sizeof(uint64_t);
+        int ret;
 
         ret = __cow_alloc_section(cm, sect_idx, 0);
         if (ret)
                 goto error;
 
-        for (i = 0; i < sect_size_bytes / COW_BLOCK_SIZE; i++) {
-		// int mapping_offset = (COW_BLOCK_SIZE / sizeof(cm->sects[sect_idx].mappings[0])) * i;
-		// int cow_file_offset = COW_BLOCK_SIZE * i;
-
-                ret = file_read(cm->dfilp, cm->dev, cm->sects[sect_idx].mappings,
-                                cm->sect_size * sect_idx * 8 + COW_HEADER_SIZE,
-                                cm->sect_size * 8);
-                if (ret)
-                        goto error;
-        }
+        ret = file_read(cm->dfilp, cm->dev, cm->sects[sect_idx].mappings,
+                        cm->sect_size * sect_idx * 8 + COW_HEADER_SIZE,
+                        cm->sect_size * 8);
+        if (ret)
+                goto error;
 
         return 0;
 
@@ -159,20 +153,15 @@ error:
  */
 static int __cow_write_section(struct cow_manager *cm, unsigned long sect_idx)
 {
-        int i, ret;
-        int sect_size_bytes = COW_SECTION_SIZE * sizeof(uint64_t);
-
-        for (i = 0; i < sect_size_bytes / COW_BLOCK_SIZE; i++) {
-		// int mapping_offset = (COW_BLOCK_SIZE / sizeof(cm->sects[sect_idx].mappings[0])) * i;
-		// int cow_file_offset = COW_BLOCK_SIZE * i;
+        int ret;
 
         ret = file_write(cm->dfilp, cm->dev, cm->sects[sect_idx].mappings,
                          cm->sect_size * sect_idx * 8 + COW_HEADER_SIZE,
                          cm->sect_size * 8);
+
         if (ret) {
                 LOG_ERROR(ret, "error writing cow manager section to file");
                 return ret;
-        }
         }
 
         return 0;
@@ -586,6 +575,7 @@ static unsigned long __cow_calculate_allowed_sects(unsigned long cache_size,
  *                data saved in the supplied COW file.  All cached sections
  *                are marked as having data which will trigger loading from
  *                disk for each data section.
+ * @dev: The &struct snap_device to which COW manager will reference.
  * @path: The path to the COW file.
  * @elements: typically the number of sectors on the block device.
  * @sect_size: The basic unit of size that the &struct cow_manager works with.
@@ -598,8 +588,8 @@ static unsigned long __cow_calculate_allowed_sects(unsigned long cache_size,
  * * 0 - success
  * * !0 - errno indicating the error
  */
-int cow_reload(const char *path, uint64_t elements, unsigned long sect_size,
-               unsigned long cache_size, int index_only,
+int cow_reload(struct snap_device* dev, const char *path, uint64_t elements,
+               unsigned long sect_size, unsigned long cache_size, int index_only,
                struct cow_manager **cm_out)
 {
         int ret;
@@ -628,6 +618,7 @@ int cow_reload(const char *path, uint64_t elements, unsigned long sect_size,
                 __cow_calculate_allowed_sects(cache_size, cm->total_sects);
         cm->data_offset = COW_HEADER_SIZE + (cm->total_sects * (sect_size * sizeof(uint64_t)));
         cm->auto_expand = NULL;
+        cm->dev = dev;
 
         ret = __cow_open_header(cm, index_only, 1);
         if (ret)

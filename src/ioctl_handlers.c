@@ -210,7 +210,10 @@ static int __ioctl_setup(unsigned int minor, const char *bdev_path,
 error:
         LOG_ERROR(ret, "error during setup ioctl handler");
         if (dev)
-                kfree(dev);
+        {
+            srng_man_destroy(&dev->sd_srng_man);
+            kfree(dev);
+        }
         put_snap_device_array_mut(snap_devices);
         return ret;
 }
@@ -243,6 +246,7 @@ static int ioctl_destroy(unsigned int minor)
 
         dev = snap_devices[minor];
         tracer_destroy(dev, snap_devices);
+        srng_man_destroy(&dev->sd_srng_man);
         kfree(dev);
 
         put_snap_device_array_mut(snap_devices);
