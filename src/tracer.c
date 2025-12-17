@@ -1400,29 +1400,28 @@ static MRF_RETURN_TYPE tracing_fn(struct request_queue *q, struct bio *bio)
         snap_device_array snap_devices = get_snap_device_array_nolock();
         MAYBE_UNUSED(ret);
 
-        smp_rmb();
-        tracer_for_each(dev, i)
+        // The original bio which include (or will include) chained fragments
+        // is managed entirely (all sectors) at once by the COW manager. Hence
+        // we must not care about chained fragments.
+        if (!bio_flagged(bio, BIO_CHAIN))
         {
+            smp_rmb();
+            tracer_for_each(dev, i)
+            {
                 if (!tracer_is_bio_for_dev(dev, bio)) continue;
                 // If we get here, then we know this is a device we're managing
                 // and the current bio belongs to said device.
-                orig_fn=dev->sd_orig_request_fn;
-                if (dattobd_bio_op_flagged(bio, DATTOBD_PASSTHROUGH))
+                orig_fn = dev->sd_orig_request_fn;
+                if (tracer_should_trace_bio(dev, bio))
                 {
-                        dattobd_bio_op_clear_flag(bio, DATTOBD_PASSTHROUGH);
+                    if (test_bit(SNAPSHOT, &dev->sd_state))
+                        ret = snap_trace_bio(dev, bio);
+                    else
+                        ret = inc_trace_bio(dev, bio);
+                    goto out;
                 }
-                else
-                {
-                        if (tracer_should_trace_bio(dev, bio))
-                        {
-                                if (test_bit(SNAPSHOT, &dev->sd_state))
-                                        ret = snap_trace_bio(dev, bio);
-                                else
-                                        ret = inc_trace_bio(dev, bio);
-                                goto out;
-                        }
-                } 
-        } // tracer_for_each(dev, i)
+            } // tracer_for_each(dev, i)
+        }
 
 #ifdef USE_BDOPS_SUBMIT_BIO
         if(unlikely(orig_fn == NULL)){
@@ -1444,7 +1443,7 @@ static MRF_RETURN_TYPE tracing_fn(struct request_queue *q, struct bio *bio)
                 }
         }
         else{
-                submit_bio_noacct( bio);
+                submit_bio_noacct(bio);
         }
 #else
         tracer_for_each(dev, i){
