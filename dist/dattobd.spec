@@ -136,7 +136,7 @@
 
 
 Name:            dattobd
-Version:         0.12.1
+Version:         0.12.2
 Release:         1%{?dist}
 Summary:         Kernel module and utilities for enabling low-level live backups
 Vendor:          Datto, Inc.
@@ -641,6 +641,11 @@ rm %{_systemd_shutdown}/umount_rootfs.shutdown
 rm %{_systemd_services}/umount-rootfs.service
 
 %changelog
+* Tue Mar 3 2026 Kamil Kontorski <kamil.kontorski@kaseya.com> - 0.12.2
+- Added sectors range check for write bios
+- Fixed cow_init issue with no snapshot device reference
+- Some minor changes
+
 * Wed May 14 2025 Andrii Fylypiuk <andrii.fylypiuk@datto.com> - 0.12.1
 - Fixed warnings related to DKMS
 - Fixed build errors on SLE 15 SP5 and SP6
