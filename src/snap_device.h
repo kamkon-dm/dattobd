@@ -46,7 +46,7 @@ static inline void tracing_ops_put(struct tracing_ops *trops) {
 // Array used to represent sectors range of recently managed bios - RCU protected with spinlock for updater
 struct sec_rng_man {
     spinlock_t srng_lock; // protection for sectors range updater
-    struct srng_array *srng_a; // array of sector ranges already written in COW file
+    struct srng_array __rcu *srng_a; // array of sector ranges already written in COW file
 };
 
 struct snap_device {

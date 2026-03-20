@@ -2530,7 +2530,10 @@ int srng_man_alloc(struct sec_rng_man *srng_man)
         ret = -ENOMEM;
         LOG_ERROR(ret, "Sector range manager allocation error");
     }
-    srng_init(srng_man->srng_a);
+    else
+    {
+        srng_init(srng_man->srng_a);
+    }
 
     return ret;
 }
@@ -2544,6 +2547,7 @@ void srng_man_destroy(struct sec_rng_man* srng_man)
     if (srng_man->srng_a)
     {
         kfree(srng_man->srng_a);
+        srng_man->srng_a = NULL;
     }
 }
 
@@ -2610,7 +2614,7 @@ int srng_man_add_range(struct snap_device* dev, struct bio* bio)
     srng.sect = bio_sector(bio);
     srng.size = bio_size(bio) >> SECTOR_SHIFT;
 
-    srng_a_new = kmalloc(sizeof(struct srng_array), GFP_KERNEL);
+    srng_a_new = kmalloc(sizeof(struct srng_array), GFP_ATOMIC);
     if (!srng_a_new)
     {
         ret = -ENOMEM;
