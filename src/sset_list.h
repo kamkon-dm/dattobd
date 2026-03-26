@@ -36,7 +36,7 @@ struct sector_set *sset_list_pop(struct sset_list *sl);
 */
 
 // The higher value the more time is needed for sectors ranges checking and more memory is consumed
-#define SRNG_MAX_COUNT (800)
+#define SRNG_MAX_COUNT (200)
 
 struct srng_range {
     u64 sect;       // first sector of a range
