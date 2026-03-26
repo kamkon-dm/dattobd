@@ -1417,7 +1417,11 @@ static MRF_RETURN_TYPE tracing_fn(struct request_queue *q, struct bio *bio)
             // and the current bio belongs to said device.
             orig_fn = dev->sd_orig_request_fn;
 
-            LOG_DEBUG("input bio range: \ts: %llu\tl: %u", bio_sector(bio), bio_size(bio) >> SECTOR_SHIFT);
+            // Write bio
+            if (bio_data_dir(bio))
+            {
+                LOG_DEBUG("write bio range: \ts: %llu\tl: %u", bio_sector(bio), bio_size(bio) >> SECTOR_SHIFT);
+            }
 
             if (tracer_should_trace_bio(dev, bio) && srng_man_check_range(dev, bio))
             {
