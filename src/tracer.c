@@ -1103,7 +1103,7 @@ static int __tracer_setup_snap(struct snap_device *dev, unsigned int minor,
                 //        struct blk_integrity	integrity;
                 //};
 
-        LOG_DEBUG("snap device stack limits:")
+        LOG_DEBUG("snap device stack limits:");
         LOG_DEBUG("seg_boundary_mask: %lu", dev->sd_queue->limits.seg_boundary_mask);
         LOG_DEBUG("virt_boundary_mask: %lu", dev->sd_queue->limits.virt_boundary_mask);
         LOG_DEBUG("max_hw_sectors: %u", dev->sd_queue->limits.max_hw_sectors);
@@ -1112,7 +1112,7 @@ static int __tracer_setup_snap(struct snap_device *dev, unsigned int minor,
         LOG_DEBUG("max_sectors: %u", dev->sd_queue->limits.max_sectors);
         LOG_DEBUG("max_user_sectors: %u", dev->sd_queue->limits.max_user_sectors);
         LOG_DEBUG("max_segment_size: %u", dev->sd_queue->limits.max_segment_size);
-        LOG_DEBUG("min_segment_size: %u", dev->sd_queue->limits.min_segment_size);
+        //LOG_DEBUG("min_segment_size: %u", dev->sd_queue->limits.min_segment_size);
         LOG_DEBUG("physical_block_size: %u", dev->sd_queue->limits.physical_block_size);
         LOG_DEBUG("logical_block_size: %u", dev->sd_queue->limits.logical_block_size);
         LOG_DEBUG("alignment_offset: %u", dev->sd_queue->limits.alignment_offset);
@@ -1124,7 +1124,7 @@ static int __tracer_setup_snap(struct snap_device *dev, unsigned int minor,
         LOG_DEBUG("max_secure_erase_sectors: %u", dev->sd_queue->limits.max_secure_erase_sectors);
         LOG_DEBUG("max_write_zeroes_sectors: %u", dev->sd_queue->limits.max_write_zeroes_sectors);
         LOG_DEBUG("max_zone_append_sectors: %u", dev->sd_queue->limits.max_zone_append_sectors);
-        LOG_DEBUG("max_hw_zone_append_sectors: %u", dev->sd_queue->limits.max_hw_zone_append_sectors);
+        //LOG_DEBUG("max_hw_zone_append_sectors: %u", dev->sd_queue->limits.max_hw_zone_append_sectors);
         LOG_DEBUG("discard_granularity: %u", dev->sd_queue->limits.discard_granularity);
         LOG_DEBUG("discard_alignment: %u", dev->sd_queue->limits.discard_alignment);
         LOG_DEBUG("zone_write_granularity: %u", dev->sd_queue->limits.zone_write_granularity);
