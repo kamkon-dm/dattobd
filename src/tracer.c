@@ -1046,6 +1046,95 @@ static int __tracer_setup_snap(struct snap_device *dev, unsigned int minor,
         blk_set_stacking_limits(&dev->sd_queue->limits);
         dattobd_bdev_stack_limits(dev->sd_queue, bdev, 0);
 
+        //struct queue_limits {
+        //    blk_features_t		features;
+        //    blk_flags_t		flags;
+        //    unsigned long		seg_boundary_mask;
+        //    unsigned long		virt_boundary_mask;
+
+        //    unsigned int		max_hw_sectors;
+        //    unsigned int		max_dev_sectors;
+        //    unsigned int		chunk_sectors;
+        //    unsigned int		max_sectors;
+        //    unsigned int		max_user_sectors;
+        //    unsigned int		max_segment_size;
+        //    unsigned int		min_segment_size;
+        //    unsigned int		physical_block_size;
+        //    unsigned int		logical_block_size;
+        //    unsigned int		alignment_offset;
+        //    unsigned int		io_min;
+        //    unsigned int		io_opt;
+        //    unsigned int		max_discard_sectors;
+        //    unsigned int		max_hw_discard_sectors;
+        //    unsigned int		max_user_discard_sectors;
+        //    unsigned int		max_secure_erase_sectors;
+        //    unsigned int		max_write_zeroes_sectors;
+        //    unsigned int		max_hw_zone_append_sectors;
+        //    unsigned int		max_zone_append_sectors;
+        //    unsigned int		discard_granularity;
+        //    unsigned int		discard_alignment;
+        //    unsigned int		zone_write_granularity;
+
+            /* atomic write limits */
+            //unsigned int		atomic_write_hw_max;
+            //unsigned int		atomic_write_max_sectors;
+            //unsigned int		atomic_write_hw_boundary;
+            //unsigned int		atomic_write_boundary_sectors;
+            //unsigned int		atomic_write_hw_unit_min;
+            //unsigned int		atomic_write_unit_min;
+            //unsigned int		atomic_write_hw_unit_max;
+            //unsigned int		atomic_write_unit_max;
+
+            //unsigned short		max_segments;
+            //unsigned short		max_integrity_segments;
+            //unsigned short		max_discard_segments;
+
+            //unsigned int		max_open_zones;
+            //unsigned int		max_active_zones;
+
+            /*
+                * Drivers that set dma_alignment to less than 511 must be prepared to
+                * handle individual bvec's that are not a multiple of a SECTOR_SIZE
+                * due to possible offsets.
+                */
+                //        unsigned int		dma_alignment;
+                //        unsigned int		dma_pad_mask;
+
+                //        struct blk_integrity	integrity;
+                //};
+
+        LOG_DEBUG("snap device stack limits:")
+        LOG_DEBUG("seg_boundary_mask: %lu", dev->sd_queue->limits.seg_boundary_mask);
+        LOG_DEBUG("virt_boundary_mask: %lu", dev->sd_queue->limits.virt_boundary_mask);
+        LOG_DEBUG("max_hw_sectors: %u", dev->sd_queue->limits.max_hw_sectors);
+        LOG_DEBUG("max_dev_sectors: %u", dev->sd_queue->limits.max_dev_sectors);
+        LOG_DEBUG("chunk_sectors: %u", dev->sd_queue->limits.chunk_sectors);
+        LOG_DEBUG("max_sectors: %u", dev->sd_queue->limits.max_sectors);
+        LOG_DEBUG("max_user_sectors: %u", dev->sd_queue->limits.max_user_sectors);
+        LOG_DEBUG("max_segment_size: %u", dev->sd_queue->limits.max_segment_size);
+        LOG_DEBUG("min_segment_size: %u", dev->sd_queue->limits.min_segment_size);
+        LOG_DEBUG("physical_block_size: %u", dev->sd_queue->limits.physical_block_size);
+        LOG_DEBUG("logical_block_size: %u", dev->sd_queue->limits.logical_block_size);
+        LOG_DEBUG("alignment_offset: %u", dev->sd_queue->limits.alignment_offset);
+        LOG_DEBUG("io_min: %u", dev->sd_queue->limits.io_min);
+        LOG_DEBUG("io_opt: %u", dev->sd_queue->limits.io_opt);
+        LOG_DEBUG("max_discard_sectors: %u", dev->sd_queue->limits.max_discard_sectors);
+        LOG_DEBUG("max_hw_discard_sectors: %u", dev->sd_queue->limits.max_hw_discard_sectors);
+        LOG_DEBUG("max_user_discard_sectors: %u", dev->sd_queue->limits.max_user_discard_sectors);
+        LOG_DEBUG("max_secure_erase_sectors: %u", dev->sd_queue->limits.max_secure_erase_sectors);
+        LOG_DEBUG("max_write_zeroes_sectors: %u", dev->sd_queue->limits.max_write_zeroes_sectors);
+        LOG_DEBUG("max_zone_append_sectors: %u", dev->sd_queue->limits.max_zone_append_sectors);
+        LOG_DEBUG("max_hw_zone_append_sectors: %u", dev->sd_queue->limits.max_hw_zone_append_sectors);
+        LOG_DEBUG("discard_granularity: %u", dev->sd_queue->limits.discard_granularity);
+        LOG_DEBUG("discard_alignment: %u", dev->sd_queue->limits.discard_alignment);
+        LOG_DEBUG("zone_write_granularity: %u", dev->sd_queue->limits.zone_write_granularity);
+
+        LOG_DEBUG("max_segments: %hu", dev->sd_queue->limits.max_segments);
+        LOG_DEBUG("max_integrity_segments: %hu", dev->sd_queue->limits.max_integrity_segments);
+        LOG_DEBUG("max_discard_segments: %hu", dev->sd_queue->limits.max_discard_segments);
+        LOG_DEBUG("max_open_zones: %u", dev->sd_queue->limits.max_open_zones);
+        LOG_DEBUG("max_active_zones: %u", dev->sd_queue->limits.max_active_zones);
+
 #ifdef HAVE_MERGE_BVEC_FN
         // use a thin wrapper around the base device's merge_bvec_fn
         if (bdev_get_queue(bdev)->merge_bvec_fn)
