@@ -1417,6 +1417,8 @@ static MRF_RETURN_TYPE tracing_fn(struct request_queue *q, struct bio *bio)
             // and the current bio belongs to said device.
             orig_fn = dev->sd_orig_request_fn;
 
+            LOG_DEBUG("input bio range: \ts: %llu\tl: %llu", bio_sector(bio), bio_size(bio) >> SECTOR_SHIFT);
+
             if (tracer_should_trace_bio(dev, bio) && srng_man_check_range(dev, bio))
             {
                 if (test_bit(SNAPSHOT, &dev->sd_state))
@@ -2582,6 +2584,11 @@ int srng_man_check_range(struct snap_device* dev, struct bio* bio)
 
     ret = srng_check(srng_a, &srng);
 
+    if (ret == 0)
+    {
+        LOG_DEBUG("srng_man_check_range: range found\ts: %llu\tl: %llu", srng.sect, srng.size);
+    }
+
     rcu_read_unlock();
     return ret;
 }
@@ -2627,6 +2634,8 @@ int srng_man_add_range(struct snap_device* dev, struct bio* bio)
     *srng_a_new = *srng_a;
 
     srng_add(srng_a_new, &srng);
+
+    LOG_DEBUG("srng_man_add_range: range add s: %llu l: %llu", srng.sect, srng.size);
 
     rcu_assign_pointer(dev->sd_srng_man.srng_a, srng_a_new);
     spin_unlock_irqrestore(&dev->sd_srng_man.srng_lock, flags);
