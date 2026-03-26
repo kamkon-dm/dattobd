@@ -1120,7 +1120,7 @@ static int __tracer_setup_snap(struct snap_device *dev, unsigned int minor,
         LOG_DEBUG("io_opt: %u", dev->sd_queue->limits.io_opt);
         LOG_DEBUG("max_discard_sectors: %u", dev->sd_queue->limits.max_discard_sectors);
         LOG_DEBUG("max_hw_discard_sectors: %u", dev->sd_queue->limits.max_hw_discard_sectors);
-        LOG_DEBUG("max_user_discard_sectors: %u", dev->sd_queue->limits.max_user_discard_sectors);
+        //LOG_DEBUG("max_user_discard_sectors: %u", dev->sd_queue->limits.max_user_discard_sectors);
         LOG_DEBUG("max_secure_erase_sectors: %u", dev->sd_queue->limits.max_secure_erase_sectors);
         LOG_DEBUG("max_write_zeroes_sectors: %u", dev->sd_queue->limits.max_write_zeroes_sectors);
         LOG_DEBUG("max_zone_append_sectors: %u", dev->sd_queue->limits.max_zone_append_sectors);
@@ -1132,8 +1132,8 @@ static int __tracer_setup_snap(struct snap_device *dev, unsigned int minor,
         LOG_DEBUG("max_segments: %hu", dev->sd_queue->limits.max_segments);
         LOG_DEBUG("max_integrity_segments: %hu", dev->sd_queue->limits.max_integrity_segments);
         LOG_DEBUG("max_discard_segments: %hu", dev->sd_queue->limits.max_discard_segments);
-        LOG_DEBUG("max_open_zones: %u", dev->sd_queue->limits.max_open_zones);
-        LOG_DEBUG("max_active_zones: %u", dev->sd_queue->limits.max_active_zones);
+        //LOG_DEBUG("max_open_zones: %u", dev->sd_queue->limits.max_open_zones);
+        //LOG_DEBUG("max_active_zones: %u", dev->sd_queue->limits.max_active_zones);
 
 #ifdef HAVE_MERGE_BVEC_FN
         // use a thin wrapper around the base device's merge_bvec_fn
