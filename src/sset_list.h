@@ -29,31 +29,32 @@ void sset_list_add(struct sset_list *sl, struct sector_set *sset);
 
 struct sector_set *sset_list_pop(struct sset_list *sl);
 
-/* Static array of sector ranges management
-*   void srng_init(struct srng_array *srng_a) - init array with zeros
-*   int srng_add(struct srng_array *srng_a, struct srng_range *srng) - add new range element to the array
-*   int srng_check(struct srng_array *srng_a, struct srng_range *srng) - check if given range is in the array
-*/
-
-// The higher value the more time is needed for sectors ranges checking and more memory is consumed
-#define SRNG_MAX_COUNT (100)
-
-struct srng_range {
-    u64 sect;       // first sector of a range
-    u64 size;       // in sectors
+// Basic sector range element
+struct sect_rng {
+    u64 sect;               // First sector of a range
+    u64 size;               // Number of sectors
+    struct sect_rng* next;  // Next element in the list
 };
 
-struct srng_array {
-    unsigned int curr_idx;
-    unsigned int cnt;
-    struct srng_range rng[SRNG_MAX_COUNT];
-    struct rcu_head rcu;
+// List of sector ranges
+struct sect_rng_list {
+    struct sect_rng* head;  // Oldest element in the list
+    struct sect_rng* tail;  // Newest element in the list
+    unsigned int count;     // List number of elements
+    unsigned int max_count; // Maximal number of elements (it can increase)
+    unsigned int hits;      // Incoming bio range hit counter (might be zeroed)
+    unsigned int msec;      // Variable used for time period measurement
+    unsigned int rec_added; // Recently added entries
+    unsigned int clone_mem_max; // Maximum memory need by clone
+    struct rcu_head rcu;    // Needed by RCU manager
 };
 
-void srng_init(struct srng_array* srng_a);
-
-int srng_add(struct srng_array* srng_a, struct srng_range* srng);
-
-int srng_check(struct srng_array* srng_a, struct srng_range* srng);
+void srng_init(struct sect_rng_list* srlist);
+void srng_add(struct sect_rng_list* srlist, struct sect_rng* srng);
+void srng_del(struct sect_rng_list* srlist);
+int srng_check(struct sect_rng_list* srlist, struct sect_rng* srng);
+unsigned int srng_count(struct sect_rng_list* srlist);
+void srng_free_all(struct sect_rng_list* srlist);
+void srng_inc_max_count(struct sect_rng_list* srlist);
 
 #endif /* SSET_LIST_H_ */

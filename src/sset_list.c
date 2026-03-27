@@ -70,71 +70,161 @@ struct sector_set *sset_list_pop(struct sset_list *sl)
         return sset;
 }
 
-/* srng_init() - Init array with zeros
+/* srng_init() - Init sectors range list
  *
- * @srng_a: Struct srng_array* to be initialized
+ * @srlist: List to be initialized
  */
-void srng_init(struct srng_array* srng_a)
-{
-    int i;
-    srng_a->curr_idx = 0;
-    srng_a->cnt = 0;
 
-    for (i = 0; i < SRNG_MAX_COUNT; i++)
+// Initial number of sectors range list entries
+#define SRNG_MAX_COUNT (100)
+
+void srng_init(struct sect_rng_list* srlist)
+{
+    srlist->head = NULL;
+    srlist->tail = NULL;
+    srlist->count = 0;
+    srlist->max_count = SRNG_MAX_COUNT;
+    srlist->hits = 0;
+    srlist->msec = 0;
+    srlist->rec_added = 0;
+    srlist->clone_mem_max = 0;
+}
+
+/* srng_inc_max_count() - Increase maximum allowed sectors range list entries
+ *
+ * @srlist: List that will be affected
+ */
+
+void srng_inc_max_count(struct sect_rng_list* srlist)
+{
+    // Why 100?
+    srlist->max_count += 100;
+}
+
+/* srng_add() - Add element to the list
+ *
+ * @srlist: List that will be affected
+ * @srng: Element to be added
+ */
+
+void srng_add(struct sect_rng_list* srlist, struct sect_rng* srng)
+{
+    if (srlist->tail)
     {
-        srng_a->rng[i].sect = 0;
-        srng_a->rng[i].size = 0;
+        srlist->tail->next = srng;
+    }
+    else
+    {
+        srlist->head = srng;
+    }
+    srlist->tail = srng;
+    srlist->count++;
+}
+
+/* srng_del() - Delete oldest element from the list
+ *
+ * @srlist: List that will be affected
+ *
+ */
+
+void srng_del(struct sect_rng_list* srlist)
+{   
+    if (srlist->head)
+    {
+        srlist->head = srlist->head->next;
+        if (srlist->head == NULL)
+        {
+            srlist->tail = NULL;
+        }
+        srlist->count--;
     }
 }
 
-/* srng_add() - Add new range element to the array
+/* srng_check() - Check if sectors range exist in the list
  *
- * @srng_a: Struct srng_array* for the new element
- * @srng: Struct srng_range* representing new element
- *
- * Return:
- * 0 success
- * !0 otherwise
- */
-int srng_add(struct srng_array* srng_a, struct srng_range* srng)
-{
-    srng_a->rng[srng_a->curr_idx].sect = srng->sect;
-    srng_a->rng[srng_a->curr_idx].size = srng->size;
-    srng_a->curr_idx++;
-    srng_a->curr_idx %= SRNG_MAX_COUNT;
-    if(srng_a->cnt < SRNG_MAX_COUNT)
-        srng_a->cnt++;
-    return 0;
-}
-
-/* srng_check() - Check if range exist in the array
- *
- * @srng_a: Struct srng_array* to search for range
- * @srng: Struct srng_range* representing range to be checked
+ * @srlist: List of sector ranges
+ * @srng: Range to be checked
  *
  * Return:
- * 0 range found
- * 1 otherwise
+ * 1 range found
+ * 0 otherwise
  */
-int srng_check(struct srng_array* srng_a, struct srng_range* srng)
-{
-    unsigned int idx = srng_a->curr_idx;
-    u64 end_sect_in = srng->sect + srng->size;
-    u64 end_sect;
-    int i, ret = 1;
 
-    for (i = 0; i < srng_a->cnt; i++)
+int srng_check(struct sect_rng_list* srlist, struct sect_rng* srng)
+{
+    struct sect_rng* start = srlist->head;
+    u64 end_sect_in = srng->sect + srng->size, end_sect;
+    int ret = 0;
+    unsigned int idx = 0;
+
+    while (start != NULL)
     {
-        if (idx == 0)
-            idx = SRNG_MAX_COUNT;
-        idx--;
-        end_sect = srng_a->rng[idx].sect + srng_a->rng[idx].size;
-        if ((srng->sect >= srng_a->rng[idx].sect) && (end_sect_in <= end_sect))
+        end_sect = start->sect + start->size;
+        if ((srng->sect >= start->sect) && (end_sect_in <= end_sect))
         {
-            ret = 0;
+            ret = 1;
+            srlist->hits++;
             break;
+        }
+        start = start->next;
+        idx++;
+    }
+
+    if (ret)
+    {
+        if (dattobd_debug == 4)
+        {
+            // Print hit index value starting from the newest entries
+            LOG_DEBUG("Index hit: %d", srlist->count-1-idx);
         }
     }
 
     return ret;
+}
+
+/* srng_count() - Count elements in the list
+ *
+ * @srlist: List of sector ranges
+ *
+ * Return:
+ * Number of list elements
+ */
+
+unsigned int srng_count(struct sect_rng_list* srlist)
+{
+    struct sect_rng* start = srlist->head;
+    unsigned int count = 0;
+
+    while (start != NULL)
+    {
+        count++;
+        start = start->next;
+    }
+    return count;
+}
+
+/* srng_free_all() - Free all elements in the list
+ *
+ * @srlist: List of sector ranges
+ *
+ */
+
+void srng_free_all(struct sect_rng_list* srlist)
+{
+    struct sect_rng* start = srlist->head;
+    struct sect_rng* curr;
+    unsigned int cnt = 0;
+
+    while (start != NULL)
+    {
+        curr = start;
+        start = start->next;
+        kfree(curr);
+        cnt++;
+    }
+
+    if (dattobd_debug == 7)
+    {
+        LOG_DEBUG("List elements freed: %u", cnt);
+    }
 }

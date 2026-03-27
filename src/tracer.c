@@ -117,6 +117,7 @@ void dattobd_free_request_tracking_ptr(struct snap_device *dev)
  * * 0 - success
  * * !0 - error
  */
+
 static int snap_trace_bio(struct snap_device *dev, struct bio *bio)
 {
         int ret;
@@ -124,6 +125,8 @@ static int snap_trace_bio(struct snap_device *dev, struct bio *bio)
         struct tracing_params *tp = NULL;
         sector_t start_sect, end_sect;
         unsigned int bytes, pages;
+        unsigned int msecs, clone_mem_max;
+        unsigned int segs;
 
         // if we don't need to cow this bio just call the real mrf normally
         if (!bio_needs_cow(bio, dev->sd_cow_inode) || tracer_read_fail_state(dev))
@@ -136,6 +139,11 @@ static int snap_trace_bio(struct snap_device *dev, struct bio *bio)
 #endif
         }
 
+        if (dattobd_debug == 4)
+        {
+            LOG_DEBUG("bio in snap \ts: %llu\trng: %u", bio_sector(bio), bio_size(bio) >> SECTOR_SHIFT);
+        }
+
         // the cow manager works in 4096 byte blocks, so read clones must also
         // be 4096 byte aligned
         start_sect = ROUND_DOWN(bio_sector(bio) - dev->sd_sect_off,
@@ -146,6 +154,12 @@ static int snap_trace_bio(struct snap_device *dev, struct bio *bio)
                         SECTORS_PER_BLOCK) +
                 dev->sd_sect_off;
         pages = (end_sect - start_sect) / SECTORS_PER_PAGE;
+
+        if (dattobd_debug == 4)
+        {
+            ret = bio_split_rw_at(bio, &dev->sd_base_dev->bdev->bd_queue->limits, &segs, pages * SECTORS_PER_PAGE * SECTOR_SIZE);
+            LOG_DEBUG("bio_split_rw_at return: \t%d", ret);
+        }
 
         // allocate tracing_params struct to hold all pointers we will need
         // across contexts
@@ -198,6 +212,28 @@ static int snap_trace_bio(struct snap_device *dev, struct bio *bio)
                 break;
         }
         
+        msecs=jiffies_to_msecs(get_jiffies_64());
+
+        if (msecs - dev->sd_srng_man.srlist->msec > 1000)
+        {
+            if (dattobd_debug == 5)
+            {
+                LOG_DEBUG("List hits: \t%u", dev->sd_srng_man.srlist->hits);
+                dev->sd_srng_man.srlist->hits = 0;
+                LOG_DEBUG("Memory used by clones (MB): \t%u", dev->sd_srng_man.srlist->clone_mem_max);
+                dev->sd_srng_man.srlist->clone_mem_max = 0;
+                LOG_DEBUG("Limit/current/added entries: \t%u\t%u\t%u", dev->sd_srng_man.srlist->max_count, dev->sd_srng_man.srlist->count, dev->sd_srng_man.srlist->count-dev->sd_srng_man.srlist->rec_added);
+                dev->sd_srng_man.srlist->rec_added = dev->sd_srng_man.srlist->count;
+            }
+            dev->sd_srng_man.srlist->msec = msecs;
+        }
+
+        clone_mem_max = (unsigned int)((atomic64_read(&dev->sd_submitted_cnt) - atomic64_read(&dev->sd_received_cnt)) * BIO_MAX_VECS * PAGE_SIZE / (1024 * 1024));
+        if (clone_mem_max > dev->sd_srng_man.srlist->clone_mem_max)
+        {
+            dev->sd_srng_man.srlist->clone_mem_max = clone_mem_max;
+        }
+
         // drop our reference to the tp
         tp_put(tp);
 
@@ -281,6 +317,12 @@ static int inc_trace_bio(struct snap_device *dev, struct bio *bio)
                 goto out;
         }
 #endif
+
+        if (dattobd_debug == 4)
+        {
+            LOG_DEBUG("bio in inc \ts: %llu\trng: %u", bio_sector(bio), bio_size(bio) >> SECTOR_SHIFT);
+        }
+
         bio_for_each_segment (bvec, bio, iter) {
                 if (page_get_inode(bio_iter_page(bio, iter)) !=
                     dev->sd_cow_inode) {
@@ -1417,10 +1459,23 @@ static MRF_RETURN_TYPE tracing_fn(struct request_queue *q, struct bio *bio)
             // and the current bio belongs to said device.
             orig_fn = dev->sd_orig_request_fn;
 
-            if (tracer_should_trace_bio(dev, bio) && srng_man_check_range(dev, bio))
+            if (tracer_should_trace_bio(dev, bio))
             {
                 if (test_bit(SNAPSHOT, &dev->sd_state))
-                    ret = snap_trace_bio(dev, bio);
+                {
+                    if (!srng_man_check_range(dev, bio))
+                    {
+                        ret = snap_trace_bio(dev, bio);
+                    }
+                    else
+                    {
+                        if (dattobd_debug == 4)
+                        {
+                            LOG_DEBUG("bio revoke\ts: %llu\trng: %u", bio_sector(bio), bio_size(bio) >> SECTOR_SHIFT);
+                        }
+                        break;
+                    }
+                }
                 else
                     ret = inc_trace_bio(dev, bio);
                 goto out;
@@ -2503,6 +2558,11 @@ int tracer_expand_cow_file_no_check(struct snap_device *dev, uint64_t by_size_by
 
 /************************ADDITIONAL FUNCTIONS************************/
 
+void srng_init(struct sect_rng_list* srlist);
+void srng_add(struct sect_rng_list* srlist, struct sect_rng* srng);
+void srng_del(struct sect_rng_list* srlist);
+int srng_check(struct sect_rng_list* srlist, struct sect_rng* srng);
+
 /**
  * srng_man_init() - Initialize a sector range manager data
  * @srng_man: The structure used by sector range manager
@@ -2524,15 +2584,15 @@ int srng_man_alloc(struct sec_rng_man *srng_man)
 {
     int ret=0;
 
-    srng_man->srng_a = kmalloc(sizeof(struct srng_array), GFP_KERNEL);
-    if (!srng_man->srng_a)
+    srng_man->srlist = kmalloc(sizeof(struct sect_rng_list), GFP_KERNEL);
+    if (!srng_man->srlist)
     {
         ret = -ENOMEM;
         LOG_ERROR(ret, "Sector range manager allocation error");
     }
     else
     {
-        srng_init(srng_man->srng_a);
+        srng_init(srng_man->srlist);
     }
 
     return ret;
@@ -2544,10 +2604,11 @@ int srng_man_alloc(struct sec_rng_man *srng_man)
  */
 void srng_man_destroy(struct sec_rng_man* srng_man)
 {
-    if (srng_man->srng_a)
+    if (srng_man->srlist)
     {
-        kfree(srng_man->srng_a);
-        srng_man->srng_a = NULL;
+        srng_free_all(srng_man->srlist);
+        kfree(srng_man->srlist);
+        srng_man->srlist = NULL;
     }
 }
 
@@ -2557,30 +2618,30 @@ void srng_man_destroy(struct sec_rng_man* srng_man)
  * @bio: Struct bio which describes the I/O
  *
  * Return:
- * 0 when bio range is repeated (return value mapped from srng_check)
- * 1 otherwise
+ * 1 when bio range is found
+ * 0 otherwise
  */
 
 int srng_man_check_range(struct snap_device* dev, struct bio* bio)
 {
-    int ret = 1;
-    struct srng_array* srng_a;
-    struct srng_range srng;
-
-    if (!dev->sd_srng_man.srng_a)
-    {
-        ret = -EFAULT;
-        LOG_ERROR(ret, "Unallocated sector range array");
-        return ret;
-    }
+    int ret = 0;
+    struct sect_rng_list* srlist;
+    struct sect_rng srng;
 
     srng.sect = bio_sector(bio);
     srng.size = bio_size(bio) >> SECTOR_SHIFT;
 
-    rcu_read_lock();
-    srng_a = rcu_dereference(dev->sd_srng_man.srng_a);
+    if (dattobd_debug == 6)
+    {
+        dattobd_debug = 5;
+        srng_inc_max_count(dev->sd_srng_man.srlist);
+        LOG_DEBUG("Sect. range count: %u", dev->sd_srng_man.srlist->max_count);
+    }
 
-    ret = srng_check(srng_a, &srng);
+    rcu_read_lock();
+    srlist = rcu_dereference(dev->sd_srng_man.srlist);
+
+    ret = srng_check(srlist, &srng);
 
     rcu_read_unlock();
     return ret;
@@ -2590,47 +2651,65 @@ int srng_man_check_range(struct snap_device* dev, struct bio* bio)
  * srng_man_add_range() - Add bio sector range to the snapshot device dedicated array (RCU protected)
  * @dev: Struct snap_device* corresponds to device from the bio
  * @bio: Struct bio which describes the I/O
- *
- * Return:
- * 0 sectors range added properly
- * !0 otherwise
  */
 
-int srng_man_add_range(struct snap_device* dev, struct bio* bio)
+static void srlist_reclaim(struct rcu_head* rp)
 {
-    int ret = 0;
-    struct srng_array* srng_a;
-    struct srng_array* srng_a_new;
-    struct srng_range srng;
+    struct sect_rng_list* srlist = container_of(rp, struct sect_rng_list, rcu);
+
+    if (srlist->count >= srlist->max_count)
+    {
+        if (srlist->head)
+        {
+            kfree(srlist->head);
+        }
+    }
+    kfree(srlist);
+}
+
+void srng_man_add_range(struct snap_device* dev, struct bio* bio)
+{
     unsigned long flags;
+    struct sect_rng_list* srlist;
+    struct sect_rng_list* srlist_new;
+    struct sect_rng* srentry_new;
 
-    if (!dev->sd_srng_man.srng_a)
+    srlist_new = kmalloc(sizeof(struct sect_rng_list), GFP_ATOMIC);
+    if (!srlist_new)
     {
-        ret = -EFAULT;
-        LOG_ERROR(ret, "Unallocated sector range array");
-        return ret;
+        LOG_DEBUG("Cannot allocate memory for sector range list");
+        return;
     }
 
-    srng.sect = bio_sector(bio);
-    srng.size = bio_size(bio) >> SECTOR_SHIFT;
-
-    srng_a_new = kmalloc(sizeof(struct srng_array), GFP_ATOMIC);
-    if (!srng_a_new)
+    srentry_new = kmalloc(sizeof(struct sect_rng), GFP_ATOMIC);
+    if (!srentry_new)
     {
-        ret = -ENOMEM;
-        LOG_ERROR(ret, "Cannot allocate memory for sector range array");
-        return ret;
+        kfree(srlist_new);
+        LOG_DEBUG("Cannot allocate memory for sector range entry");
+        return;
     }
+
+    srentry_new->sect = bio_sector(bio);
+    srentry_new->size = bio_size(bio) >> SECTOR_SHIFT;
+    srentry_new->next = NULL;
 
     spin_lock_irqsave(&dev->sd_srng_man.srng_lock, flags);
-    srng_a = rcu_dereference_protected(dev->sd_srng_man.srng_a, lockdep_is_held(&dev->sd_srng_man.srng_lock));
-    *srng_a_new = *srng_a;
+    srlist = rcu_dereference_protected(dev->sd_srng_man.srlist, lockdep_is_held(&dev->sd_srng_man.srng_lock));
 
-    srng_add(srng_a_new, &srng);
+    *srlist_new = *srlist;
 
-    rcu_assign_pointer(dev->sd_srng_man.srng_a, srng_a_new);
+    // Add new element to the list
+    srng_add(srlist_new, srentry_new);
+    if (dattobd_debug == 4)
+    {
+        LOG_DEBUG("List count:\t%u", srlist_new->count);
+    }
+    if(srlist_new->count > srlist_new->max_count)
+    {
+        // Remove oldest element from the list but do not free it yet - RCU reclaim routine need to manage this
+        srng_del(srlist_new);
+    }
+    rcu_assign_pointer(dev->sd_srng_man.srlist, srlist_new);
     spin_unlock_irqrestore(&dev->sd_srng_man.srng_lock, flags);
-    kfree_rcu(srng_a, rcu);
-
-    return ret;
+    call_rcu(&srlist->rcu, srlist_reclaim);
 }

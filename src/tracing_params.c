@@ -12,6 +12,9 @@
 #include "logging.h"
 #include "snap_device.h"
 
+#define SECTORS_PER_PAGE_SHIFT	(PAGE_SHIFT - SECTOR_SHIFT)
+#define SECTORS_PER_PAGE	(1 << SECTORS_PER_PAGE_SHIFT)
+
 /**
  * tp_alloc() - Allocates and initializes tracing params and increments the
  * reference count.
@@ -65,6 +68,7 @@ void tp_get(struct tracing_params *tp)
  */
 void tp_put(struct tracing_params *tp)
 {
+        unsigned int max_pages = 0;
         // drop a reference to the tp
         if (atomic_dec_and_test(&tp->refs)) {
                 struct bio_sector_map *next, *curr = NULL;
@@ -73,9 +77,22 @@ void tp_put(struct tracing_params *tp)
                 // orig_bio
                 bio_queue_add(&tp->dev->sd_orig_bios, tp->orig_bio);
 
-                // all data from the write bio has been written to COW at this point
-                // hence, update the range of used sectors
-                srng_man_add_range(tp->dev, tp->orig_bio);
+#ifdef BIO_MAX_PAGES
+                max_pages = BIO_MAX_PAGES;
+#else
+                max_pages = BIO_MAX_VECS;
+#endif
+                // do not add bio which most probably will not be splited
+                if (bio_sectors(tp->orig_bio) > max_pages * SECTORS_PER_PAGE)
+                {
+                    // all data from the write bio has been written to COW at this point
+                    // hence, update the range of used sectors
+                    if (dattobd_debug == 4)
+                    {
+                        LOG_DEBUG("bio add\ts: %llu\t rng:%u", bio_sector(tp->orig_bio), bio_size(tp->orig_bio) >> SECTOR_SHIFT);
+                    }
+                    srng_man_add_range(tp->dev, tp->orig_bio);
+                }
 
                 // free nodes in the sector map list
                 for (curr = tp->bio_sects.head; curr != NULL; curr = next) {
