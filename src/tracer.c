@@ -597,7 +597,7 @@ static int __tracer_setup_cow(struct snap_device *dev,
                 } else {
                         // reload the cow manager
                         LOG_DEBUG("reloading cow manager");
-                        ret = cow_reload(cow_path, SECTOR_TO_BLOCK(size),
+                        ret = cow_reload(dev, cow_path, SECTOR_TO_BLOCK(size),
                                          COW_SECTION_SIZE, dev->sd_cache_size,
                                          (open_method == 2), &dev->sd_cow);
                         if (ret)
@@ -1407,11 +1407,11 @@ static MRF_RETURN_TYPE tracing_fn(struct request_queue *q, struct bio *bio)
                 // If we get here, then we know this is a device we're managing
                 // and the current bio belongs to said device.
                 orig_fn=dev->sd_orig_request_fn;
-                if (dattobd_bio_op_flagged(bio, DATTOBD_PASSTHROUGH))
-                {
-                        dattobd_bio_op_clear_flag(bio, DATTOBD_PASSTHROUGH);
-                }
-                else
+
+                // Splited BIO fragments are resubmitted by MRF thread.
+                // COW manager have already written all data from original BIO
+                // Hence, no need to send same data to COW manager again.
+                if (current != dev->sd_mrf_thread)
                 {
                         if (tracer_should_trace_bio(dev, bio))
                         {
