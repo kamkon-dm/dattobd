@@ -135,6 +135,11 @@ static int snap_trace_bio(struct snap_device *dev, struct bio *bio)
 #endif
         }
 
+        if (dattobd_debug == 4)
+        {
+            LOG_DEBUG("bio in snap \ts: %llu\trng: %u", bio_sector(bio), bio_size(bio) >> SECTOR_SHIFT);
+        }
+
         // the cow manager works in 4096 byte blocks, so read clones must also
         // be 4096 byte aligned
         start_sect = ROUND_DOWN(bio_sector(bio) - dev->sd_sect_off,
@@ -597,7 +602,7 @@ static int __tracer_setup_cow(struct snap_device *dev,
                 } else {
                         // reload the cow manager
                         LOG_DEBUG("reloading cow manager");
-                        ret = cow_reload(cow_path, SECTOR_TO_BLOCK(size),
+                        ret = cow_reload(dev, cow_path, SECTOR_TO_BLOCK(size),
                                          COW_SECTION_SIZE, dev->sd_cache_size,
                                          (open_method == 2), &dev->sd_cow);
                         if (ret)
@@ -1407,9 +1412,12 @@ static MRF_RETURN_TYPE tracing_fn(struct request_queue *q, struct bio *bio)
                 // If we get here, then we know this is a device we're managing
                 // and the current bio belongs to said device.
                 orig_fn=dev->sd_orig_request_fn;
-                if (dattobd_bio_op_flagged(bio, DATTOBD_PASSTHROUGH))
+                if (current == dev->sd_mrf_thread)
                 {
-                        dattobd_bio_op_clear_flag(bio, DATTOBD_PASSTHROUGH);
+                    if (dattobd_debug == 4)
+                    {
+                        LOG_DEBUG("bio revoke \ts: %llu\trng: %u", bio_sector(bio), bio_size(bio) >> SECTOR_SHIFT);
+                    }
                 }
                 else
                 {

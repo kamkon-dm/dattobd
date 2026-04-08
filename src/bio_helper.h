@@ -82,25 +82,6 @@ void dattobd_bio_set_dev(struct bio *bio, struct block_device *bdev);
 
 void dattobd_bio_copy_dev(struct bio *dst, struct bio *src);
 
-/* don't perform COW operation */
-#ifdef HAVE_ENUM_REQ_OP
-//#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,8,0) && LINUX_VERSION_CODE <
-// KERNEL_VERSION(4,10,0)
-/* special case for deb9's 4.9 train
- * Bit 30 conflicts with struct bio's bi_opf opcode bitfield, which occupies the
- * top 3 bits of the member. If we set that bit, it will mutate the operation
- * that the bio is representing. Setting this to 28 puts this in an unused flag
- * for bi_opf (that flag means something in struct request's cmd_flags, but
- * we're not setting that).
- */
-#define __DATTOBD_PASSTHROUGH 28 // set as the last flag bit
-#else
-// set as an unused flag in versions older than 4.8
-// set as an unused opcode bit in kernels newer than 4.9
-#define __DATTOBD_PASSTHROUGH 30
-#endif
-#define DATTOBD_PASSTHROUGH (1ULL << __DATTOBD_PASSTHROUGH)
-
 #ifndef HAVE_SUBMIT_BIO_1
 //#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,8,0)
 
