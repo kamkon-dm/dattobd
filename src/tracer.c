@@ -1409,7 +1409,7 @@ static MRF_RETURN_TYPE tracing_fn(struct request_queue *q, struct bio *bio)
                 orig_fn=dev->sd_orig_request_fn;
 
                 // Splited BIO fragments are resubmitted by MRF thread.
-                // COW manager have already written all data from original BIO
+                // COW manager has already written all data from original BIO.
                 // Hence, no need to send same data to COW manager again.
                 if (current != dev->sd_mrf_thread)
                 {
