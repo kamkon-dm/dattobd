@@ -20,8 +20,9 @@ static:
 	ar rcs libdattobd.a libdattobd.o
 
 install: shared
-	install $(LIBNAME).$(SOVER) $(LIBDIR)
+	mkdir -p $(LIBDIR)
 	install $(LIBNAME) $(LIBDIR)
+	ln -s $(LIBDIR)/$(LIBNAME) $(LIBDIR)/$(LIBNAME).$(SOVER)
 	ldconfig
 
 uninstall:
