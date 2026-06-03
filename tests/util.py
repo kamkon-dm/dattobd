@@ -48,12 +48,15 @@ def loop_create(loop, path):
     cmd = ["losetup", loop, path]
     subprocess.check_call(cmd, timeout=10)
 
-
 def loop_destroy(loop):
     cmd = ["losetup", "-d", loop]
     subprocess.check_call(cmd, timeout=10)
 
+def loop_avail():
+    cmd = ["losetup", "-f"]
+    return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.replace("\n", "").replace("\r", "")
 
 def mkfs(device):
     cmd = ["mkfs.ext4", "-F", device]
     subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+

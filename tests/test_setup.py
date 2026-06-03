@@ -16,7 +16,6 @@ from devicetestcase import DeviceTestCase
 
 class TestSetup(DeviceTestCase):
     def setUp(self):
-        self.device = "/dev/loop0"
         self.mount = "/tmp/dattobd"
         self.cow_file = "cow.snap"
         self.cow_full_path = "{}/{}".format(self.mount, self.cow_file)
@@ -61,10 +60,10 @@ class TestSetup(DeviceTestCase):
 
     def test_setup_already_tracked_volume(self):
         self.assertEqual(dattobd.setup(self.minor, self.device, self.cow_full_path), 0)
-        self.addCleanup(dattobd.destroy, self.minor)
 
         self.assertEqual(dattobd.setup(self.minor, self.device, self.cow_full_path), errno.EBUSY)
         self.assertTrue(os.path.exists(self.snap_device))
+        self.addCleanup(dattobd.destroy, self.minor)
         self.assertIsNotNone(dattobd.info(self.minor))
 
     def test_setup_volume(self):

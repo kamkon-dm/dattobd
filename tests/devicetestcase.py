@@ -9,6 +9,7 @@ import unittest
 
 import kmod
 import util
+import subprocess
 
 
 @unittest.skipUnless(os.geteuid() == 0, "Must be run as root")
@@ -16,9 +17,8 @@ class DeviceTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.backing_store = "/tmp/disk.img"
-        cls.device = "/dev/loop0"
+        cls.device = util.loop_avail()
         cls.mount = "/tmp/dattobd"
-
         cls.kmod = kmod.Module("../src/dattobd.ko")
         cls.kmod.load(debug=1)
 

@@ -16,7 +16,6 @@ from devicetestcase import DeviceTestCase
 
 class TestTransitionToIncremental(DeviceTestCase):
     def setUp(self):
-        self.device = "/dev/loop0"
         self.mount = "/tmp/dattobd"
         self.cow_file = "cow.snap"
         self.cow_full_path = "{}/{}".format(self.mount, self.cow_file)
