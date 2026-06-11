@@ -588,9 +588,14 @@ int bio_needs_cow(struct bio *bio, struct inode *inode)
         bio_iter_t iter;
         bio_iter_bvec_t bvec;
 
-#if defined HAVE_ENUM_REQ_OPF || (defined HAVE_ENUM_REQ_OP && defined HAVE_ENUM_REQ_OPF_WRITE_ZEROES)
+        // If REQ_OP_WRITE_ZEROES is available then REQ_OP_DISCARD,
+        // REQ_OP_SECURE_ERASE and bio_op are available also.
+
+#if defined HAVE_ENUM_REQ_OP_WRITE_ZEROES
         //#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,10,0)
-        if (bio_op(bio) == REQ_OP_WRITE_ZEROES)
+        if (bio_op(bio) == REQ_OP_WRITE_ZEROES ||
+            bio_op(bio) == REQ_OP_DISCARD ||
+            bio_op(bio) == REQ_OP_SECURE_ERASE)
                 return 1;
 #endif
 
