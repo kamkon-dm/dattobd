@@ -7,7 +7,7 @@
 
 import hashlib
 import subprocess
-
+import sys
 
 def mount(device, path, opts=None):
     cmd = ["mount", device, path]
@@ -54,7 +54,10 @@ def loop_destroy(loop):
 
 def loop_avail():
     cmd = ["losetup", "-f"]
-    return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.replace("\n", "").replace("\r", "")
+    if sys.version_info >= (3, 7):
+        return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.replace("\n", "").replace("\r", "")
+    else:
+        return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, check=True).stdout.replace("\n", "").replace("\r", "")
 
 def mkfs(device):
     cmd = ["mkfs.ext4", "-F", device]
